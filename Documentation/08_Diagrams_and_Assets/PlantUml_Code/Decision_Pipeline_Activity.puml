@@ -1,0 +1,24 @@
+@startuml
+title SCORE - Decision Pipeline (Activity)
+
+start
+:Receive user input\n(context + constraints);
+if (Weather adapter enabled?) then (yes)
+  :Fetch weather label;
+endif
+
+if (Image provided?) then (yes)
+  :Run perception (segmentation + attributes + colors);
+else (no)
+  :Use manual garment selection;
+endif
+
+:Load wardrobe items\n(embeddings + metadata);
+:Context-aware filtering\n(top-K candidates);
+:Generate outfit combinations;
+:Compatibility scoring;
+:Rank + build explanations;
+:Return top recommendations;
+stop
+
+@enduml

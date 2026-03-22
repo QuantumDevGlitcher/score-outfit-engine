@@ -1,0 +1,47 @@
+@startuml
+title SCORE — Feedback & Learning Loop (Lightweight RL)
+
+skinparam shadowing false
+
+actor User
+
+rectangle "Recommendation Cycle" {
+  (Select Context) as LC1
+  (Generate Candidates\nfrom Wardrobe) as LC2
+  (Score Candidates\nFuzzy + Context) as LC3
+  (Show Top Results\n+ Explanation) as LC4
+}
+
+rectangle "Feedback" {
+  (User Feedback\nApprove/Reject/None) as LF1
+  (Reward Mapping\n+1 / -1 / 0) as LF2
+}
+
+rectangle "Preference Update" {
+  (Update Weights\nw_new = w_old + lr*reward) as LU1
+  (Clamp Weights\nSafety Bounds) as LU2
+  (Persist Profile\nJSON/SQLite) as LU3
+}
+
+User --> LC1
+LC1 --> LC2
+LC2 --> LC3
+LC3 --> LC4
+User <-- LC4
+
+User --> LF1
+LF1 --> LF2
+LF2 --> LU1
+LU1 --> LU2
+LU2 --> LU3
+
+LU3 ..> LC3 : influences future scoring\n(PreferenceAlignment term)
+
+note right of LU2
+Safety constraints:
+- weights bounded
+- base fuzzy rules remain dominant
+- context constraints cannot be overridden
+end note
+
+@enduml

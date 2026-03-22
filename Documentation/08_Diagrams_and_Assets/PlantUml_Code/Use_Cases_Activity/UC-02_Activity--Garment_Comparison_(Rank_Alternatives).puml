@@ -1,0 +1,20 @@
+@startuml
+title UC-02 — Garment Comparison (Activity)
+start
+:User selects fixed items\n(e.g., pants + shoes);
+:User provides alternatives\n(e.g., Shirt A vs Shirt B vs Shirt C);
+:User optionally selects context;
+:System scores each alternative\nagainst fixed items + context;
+:System ranks alternatives;
+:Show explanations\n(why A > B);
+if (User chooses one?) then (yes)
+  :Save chosen alternative;
+  :Ask for feedback;
+  if (Feedback given?) then (yes)
+    :Store feedback + update personalization\n(optional);
+  endif
+else (no)
+  :User adjusts alternatives\nor exits;
+endif
+stop
+@enduml

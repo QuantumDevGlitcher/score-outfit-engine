@@ -1,44 +1,10 @@
-import { useState } from "react";
-import { Sparkles } from "lucide-react";
+import { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import TopNav from "@/components/TopNav";
 import ProfileIndicator from "@/components/ProfileIndicator";
 import ContextSection from "@/components/ContextSection";
-import CurrentOutfitSection from "@/components/CurrentOutfitSection";
 import RecommendationResultsSection from "@/components/RecommendationResultsSection";
-
-const RECOMMENDATIONS = [
-  {
-    id: 1,
-    name: "Monochrome Minimalism",
-    score: 92,
-    explanation: "Neutral tones with clean lines create a sophisticated look",
-    fullExplanation:
-      "This outfit combines neutral tones and minimalist styling, which aligns perfectly with your selected context and personal style profile. The clean silhouettes and coordinated color palette provide a polished, professional appearance.",
-  },
-  {
-    id: 2,
-    name: "Professional Contrast",
-    score: 87,
-    explanation: "Dark base with accent pieces provides visual interest",
-    fullExplanation:
-      "The contrasting color combination creates visual depth while maintaining professionalism. This look works well for formal settings and complements your preference for balanced styling.",
-  },
-  {
-    id: 3,
-    name: "Relaxed Elegance",
-    score: 84,
-    explanation: "Comfortable fit with refined styling for casual settings",
-    fullExplanation:
-      "Combining comfort with elegance, this outfit bridges the gap between casual and formal wear. It's ideal for semi-formal occasions where you want to maintain a relaxed vibe.",
-  },
-];
-
-interface GarmentItem {
-  id: string;
-  category: string;
-  name: string;
-  image?: string;
-}
+import { useToast } from "@/hooks/use-toast";
 
 interface DashboardProps {
   theme: "dark" | "light";
@@ -49,25 +15,15 @@ export default function Dashboard({
   theme,
   onThemeChange,
 }: DashboardProps) {
-  // Profile State
-  const [hasProfile, setHasProfile] = useState(false);
-
+  const location = useLocation();
   // Context State
   const [contextInput, setContextInput] = useState("");
-  const [selectedContext, setSelectedContext] = useState<string | null>(null);
-  const [selectedStyle, setSelectedStyle] = useState<string | null>(null);
 
-  // Outfit State
-  const [imageUploaded, setImageUploaded] = useState(false);
-  const [garments, setGarments] = useState<Record<string, GarmentItem | null>>(
-    {
-      top: null,
-      bottom: null,
-      shoes: null,
-      outerwear: null,
-      accessories: null,
+  useEffect(() => {
+    if (location.state?.context) {
+      setContextInput(location.state.context);
     }
-  );
+  }, [location.state]);
 
   // Analysis State
   const [isAnalyzed, setIsAnalyzed] = useState(false);
@@ -77,46 +33,120 @@ export default function Dashboard({
   } | null>(null);
 
   // Handlers
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setImageUploaded(true);
-    }
-  };
+  const [recommendations, setRecommendations] = useState<any[]>([]);
+  const [currentRunId, setCurrentRunId] = useState<string | null>(null);
 
-  const handleGarmentRemove = (slot: string) => {
-    setGarments((prev) => ({
-      ...prev,
-      [slot]: null,
-    }));
-  };
-
-  const handleAddGarment = (slot: string) => {
-    // Mock garment selection - in a real app, this would open a wardrobe modal
-    const mockGarment: GarmentItem = {
-      id: `garment_${slot}`,
-      category: slot.charAt(0).toUpperCase() + slot.slice(1),
-      name: `Selected ${slot}`,
-    };
-    setGarments((prev) => ({
-      ...prev,
-      [slot]: mockGarment,
-    }));
-  };
-
-  const handleAnalyze = () => {
-    if (contextInput || selectedContext) {
+  const handleAnalyze = async () => {
+    if (contextInput) {
+      const occasion = contextInput;
       setAnalysisContext({
-        context: contextInput || selectedContext || "Custom occasion",
-        style: selectedStyle,
+        context: occasion,
+        style: null,
       });
-      setIsAnalyzed(true);
+
+      // Recommend from Wardrobe Pool
+      try {
+        const payload = {
+          context: {
+            occasion: occasion,
+            style_intent: "Balanced",
+            weather: "pleasant"
+          },
+          query: occasion,
+        };
+
+        const response = await fetch("/api/recommend/from-wardrobe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        
+        if (!response.ok) throw new Error("Wardrobe recommendation failed");
+        const data = await response.json();
+        setCurrentRunId(data.run_id);
+        
+        const combinedRecommendations = data.recommendations.map((rec: any, index: number) => {
+          return {
+            id: index + 1,
+            name: `Wardrobe Recommendation ${index + 1}`,
+            score: Math.round(rec.compatibility_score * 100),
+            explanation: rec.explanation,
+            fullExplanation: (rec.style_tips?.join(" ") || "") + (rec.explanation ? " " + rec.explanation : ""),
+            items: rec.items,
+            outfit_embedding: rec.outfit_embedding,
+            s_style: rec.s_style,
+            s_rel: rec.s_rel,
+            raw_rec: rec
+          };
+        });
+        
+        setRecommendations(combinedRecommendations);
+        setIsAnalyzed(true);
+        return;
+      } catch (error) {
+        console.error("Wardrobe recommendation failed", error);
+        alert("Failed to fetch wardrobe recommendations. Please try again.");
+      }
     }
   };
 
-  const hasContext = !!contextInput || !!selectedContext;
-  const hasOutfit = imageUploaded || Object.values(garments).some((g) => g !== null);
-  const hasRequiredOutfit =
-    imageUploaded || (garments.top && garments.bottom && garments.shoes);
+  const { toast } = useToast();
+
+  const handleFeedback = async (rec: any, liked: boolean) => {
+    try {
+      const response = await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: currentRunId || "dashboard_session",
+          outfit_embedding: rec.outfit_embedding,
+          liked,
+          s_style: rec.s_style || 0.5,
+          s_rel: rec.s_rel || 0.5,
+        }),
+      });
+
+      if (!response.ok) throw new Error("Feedback failed");
+      
+      toast({
+        title: liked ? "Approved!" : "Disapproved",
+        description: `Your style preferences have been updated. Alpha: ${(await response.json()).new_alpha.toFixed(2)}`,
+      });
+    } catch (error) {
+      console.error("Feedback error", error);
+      toast({
+        title: "Feedback Error",
+        description: "Failed to update style preferences.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleSave = async (rec: any) => {
+    try {
+      const response = await fetch("/api/saved-outfits", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ outfit: rec.raw_rec }),
+      });
+
+      if (!response.ok) throw new Error("Save failed");
+
+      toast({
+        title: "Outfit Saved",
+        description: "You can find this outfit in your Saved Outfits page.",
+      });
+    } catch (error) {
+      console.error("Save error", error);
+      toast({
+        title: "Save Error",
+        description: "Failed to save the outfit.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const hasContext = !!contextInput;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -133,44 +163,18 @@ export default function Dashboard({
           <ContextSection
             contextInput={contextInput}
             onContextChange={setContextInput}
-            selectedContext={selectedContext}
-            onContextSelect={setSelectedContext}
-            selectedStyle={selectedStyle}
-            onStyleSelect={setSelectedStyle}
+            onAnalyze={handleAnalyze}
           />
 
-          {/* Section 2: Current Outfit */}
-          <CurrentOutfitSection
-            imageUploaded={imageUploaded}
-            onImageUpload={handleImageUpload}
-            garments={garments}
-            onGarmentRemove={handleGarmentRemove}
-            onAddGarment={handleAddGarment}
-          />
-
-          {/* Analyze Button */}
-          <div className="flex justify-center">
-            <button
-              onClick={handleAnalyze}
-              disabled={!hasContext || !hasRequiredOutfit}
-              className={`px-8 py-4 rounded-lg font-semibold text-base transition-all duration-200 flex items-center gap-2 ${
-                !hasContext || !hasRequiredOutfit
-                  ? "bg-slate-700/30 text-muted-foreground/50 cursor-not-allowed"
-                  : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 hover:bg-emerald-500/30 hover:scale-105 shadow-lg shadow-emerald-500/10"
-              }`}
-            >
-              <Sparkles size={20} />
-              Analyze Outfit
-            </button>
-          </div>
-
-          {/* Section 3: Recommendation Results */}
+          {/* Section 2: Recommendation Results */}
           <RecommendationResultsSection
             hasContext={hasContext}
-            hasOutfit={hasOutfit}
             isAnalyzed={isAnalyzed}
-            recommendations={isAnalyzed ? RECOMMENDATIONS : []}
+            recommendations={recommendations}
             analysisContext={analysisContext}
+            onApprove={(rec) => handleFeedback(rec, true)}
+            onReject={(rec) => handleFeedback(rec, false)}
+            onSave={handleSave}
           />
 
           {/* Footer Spacing */}

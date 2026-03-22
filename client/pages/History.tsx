@@ -1,11 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import TopNav from "@/components/TopNav";
 import AnalysisDetailsDrawer, {
   AnalysisHistoryItem,
+  AnalysisRecommendation,
+  AnalysisGarment,
 } from "@/components/AnalysisDetailsDrawer";
-import { Clock, ChevronRight } from "lucide-react";
-import { MOCK_ANALYSIS_HISTORY } from "@/data/mockAnalysisHistory";
+import { Clock, ChevronRight, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useToast } from "@/hooks/use-toast";
 
 interface HistoryProps {
   theme: "dark" | "light";
@@ -14,9 +16,78 @@ interface HistoryProps {
 
 export default function History({ theme, onThemeChange }: HistoryProps) {
   const navigate = useNavigate();
-  const [items] = useState<AnalysisHistoryItem[]>(MOCK_ANALYSIS_HISTORY);
+  const { toast } = useToast();
+  const [items, setItems] = useState<AnalysisHistoryItem[]>([]);
+  const [rawRuns, setRawRuns] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [selectedAnalysis, setSelectedAnalysis] = useState<AnalysisHistoryItem | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+
+  useEffect(() => {
+    fetchHistory();
+  }, []);
+
+  const fetchHistory = async () => {
+    try {
+      setIsLoading(true);
+      const response = await fetch("/api/history");
+      if (!response.ok) throw new Error("Failed to fetch history");
+      const data = await response.json();
+      setRawRuns(data);
+      
+      const mappedHistory: AnalysisHistoryItem[] = data.map((run: any) => {
+        const mapRecommendation = (rec: any, index: number): AnalysisRecommendation => ({
+          id: `rec-${index}-${run._id}`,
+          name: index === 0 ? "Primary Recommendation" : `Alternative ${index}`,
+          score: Math.round(rec.compatibility_score * 100),
+          explanation: rec.explanation || "No explanation provided.",
+          breakdown: {
+            overall_score: Math.round(rec.compatibility_score * 100),
+            breakdown: [
+              { label: "Style Match", value: Math.round((rec.s_style || 0) * 100) },
+              { label: "Relevance", value: Math.round((rec.s_rel || 0) * 100) },
+              { label: "Color Harmony", value: Math.round((rec.color_harmony || 0) * 100) },
+              { label: "Formality", value: Math.round((rec.formality_match || 0) * 100) },
+            ].filter(b => b.value > 0),
+            explanation: rec.explanation || ""
+          }
+        });
+
+        const mapGarment = (item: any, idx: number): AnalysisGarment => ({
+          id: `g-${idx}-${run._id}`,
+          name: item.clothing_type || "Garment",
+          category: item.clothing_type || "Unknown",
+          image: item.image_path ? `/uploads/${item.image_path}` : undefined
+        });
+
+        const inputGarments = (run.outfit?.items || []).map(mapGarment);
+        const recGarments = (run.recommendations[0]?.items || []).map(mapGarment);
+
+        return {
+          id: run._id,
+          date: run.created_at,
+          context: run.query || run.context.occasion,
+          styleIntent: run.context.style_intent,
+          inputMode: run.outfit?.source_image_path ? "photo" : "manual",
+          garments: inputGarments.length > 0 ? inputGarments : recGarments,
+          topRecommendation: mapRecommendation(run.recommendations[0], 0),
+          alternatives: run.recommendations.slice(1).map((rec: any, idx: number) => mapRecommendation(rec, idx + 1)),
+          feedback: run.feedback || null 
+        };
+      });
+
+      setItems(mappedHistory);
+    } catch (error) {
+      console.error("Error fetching history:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load history",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -38,18 +109,63 @@ export default function History({ theme, onThemeChange }: HistoryProps) {
   };
 
   const handleRerun = (analysisId: string) => {
-    // In a real app, this would reset the dashboard with the previous context
-    navigate("/dashboard");
+    const run = rawRuns.find((r) => r._id === analysisId);
+    if (run) {
+      navigate("/dashboard", { state: { context: run.query || run.context.occasion } });
+    } else {
+      navigate("/dashboard");
+    }
   };
 
-  const handleSave = (analysisId: string) => {
-    // In a real app, this would save the outfit to Saved Outfits
-    console.log("Save outfit from analysis:", analysisId);
+  const handleSave = async (analysisId: string) => {
+    const run = rawRuns.find((r) => r._id === analysisId);
+    if (!run || !run.recommendations || run.recommendations.length === 0) return;
+
+    try {
+      const response = await fetch("/api/saved-outfits", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ outfit: run.recommendations[0] }),
+      });
+
+      if (!response.ok) throw new Error("Failed to save outfit");
+
+      toast({
+        title: "Success",
+        description: "Outfit saved to your collection",
+      });
+    } catch (error) {
+      console.error("Error saving outfit:", error);
+      toast({
+        title: "Error",
+        description: "Failed to save outfit",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleDeleteAnalysis = (analysisId: string) => {
-    // In a real app, this would delete from the backend
-    console.log("Delete analysis:", analysisId);
+  const handleDeleteAnalysis = async (analysisId: string) => {
+    try {
+      const response = await fetch(`/api/history/${analysisId}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) throw new Error("Failed to delete analysis");
+
+      setItems((prev) => prev.filter((item) => item.id !== analysisId));
+      setRawRuns((prev) => prev.filter((r) => r._id !== analysisId));
+      toast({
+        title: "Success",
+        description: "Analysis deleted",
+      });
+    } catch (error) {
+      console.error("Error deleting analysis:", error);
+      toast({
+        title: "Error",
+        description: "Failed to delete analysis",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -60,7 +176,12 @@ export default function History({ theme, onThemeChange }: HistoryProps) {
       {/* Main Content */}
       <div className="flex-1 px-4 md:px-6 py-8 overflow-y-auto">
         <div className="max-w-3xl mx-auto">
-          {items.length === 0 ? (
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center py-20 gap-4">
+              <Loader2 className="w-10 h-10 text-emerald-500 animate-spin" />
+              <p className="text-muted-foreground animate-pulse">Loading history...</p>
+            </div>
+          ) : items.length === 0 ? (
             /* Empty State */
             <div className="text-center py-16">
               <div className="w-16 h-16 rounded-lg bg-slate-700/20 flex items-center justify-center mx-auto mb-4">

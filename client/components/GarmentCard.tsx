@@ -1,4 +1,4 @@
-import { Edit2 } from "lucide-react";
+import { Edit2, CheckSquare, Square } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import ImagePlaceholder from "@/components/ImagePlaceholder";
@@ -16,12 +16,20 @@ export interface Garment {
   formality: string;
   notes?: string;
   tags?: string[];
+  // ML Features
+  formality_score?: number;
+  weather_warmth?: number;
+  dominant_colors?: { hex: string; percentage: number }[];
+  confidence?: number;
 }
 
 interface GarmentCardProps {
   garment: Garment;
   onClick: (garment: Garment) => void;
   onEdit: (e: React.MouseEvent, garment: Garment) => void;
+  isSelectionMode?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: () => void;
 }
 
 const categoryColors: Record<string, string> = {
@@ -43,6 +51,9 @@ export default function GarmentCard({
   garment,
   onClick,
   onEdit,
+  isSelectionMode,
+  isSelected,
+  onToggleSelect,
 }: GarmentCardProps) {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
@@ -50,7 +61,10 @@ export default function GarmentCard({
   return (
     <div
       onClick={() => onClick(garment)}
-      className="bg-card border border-border rounded-[20px] overflow-hidden hover:shadow-lg hover:shadow-accent/10 transition-all duration-300 cursor-pointer group flex flex-col h-full"
+      className={cn(
+        "bg-card border border-border rounded-[20px] overflow-hidden hover:shadow-lg hover:shadow-accent/10 transition-all duration-300 cursor-pointer group flex flex-col h-full relative",
+        isSelected && "border-accent ring-2 ring-accent/20 ring-inset shadow-lg shadow-accent/10"
+      )}
     >
       {/* Top Section: Image */}
       <div className="relative overflow-hidden bg-background aspect-square">
@@ -80,22 +94,49 @@ export default function GarmentCard({
             />
           </>
         )}
-        {/* Category Badge */}
+        
+        {/* Selection Indicator */}
+        {isSelectionMode && (
+          <div 
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleSelect?.();
+            }}
+            className="absolute top-3 left-3 z-20"
+          >
+            <div className={cn(
+              "w-6 h-6 rounded-lg flex items-center justify-center transition-all duration-200",
+              isSelected 
+                ? "bg-accent text-white shadow-lg shadow-accent/30" 
+                : "bg-background/80 backdrop-blur border border-slate-700/50 text-muted-foreground"
+            )}>
+              {isSelected ? <CheckSquare size={16} /> : <Square size={16} />}
+            </div>
+          </div>
+        )}
+
+        {/* Category Badge - Offset if selection mode is on */}
         <div
           className={cn(
-            "absolute top-3 left-3 px-3 py-1 rounded-full text-xs font-semibold border",
+            "absolute top-3 px-3 py-1 rounded-full text-xs font-semibold border transition-all duration-200",
+            isSelectionMode ? "left-11" : "left-3",
             categoryColors[garment.category] || categoryColors.Top
           )}
         >
           {garment.category}
         </div>
-        {/* Edit Icon */}
-        <button
-          onClick={onEdit}
-          className="absolute top-3 right-3 p-2 rounded-lg bg-background/80 backdrop-blur hover:bg-background text-foreground hover:text-accent transition-colors duration-200 opacity-0 group-hover:opacity-100"
-        >
-          <Edit2 size={16} />
-        </button>
+        {/* Edit Icon - Hidden in selection mode */}
+        {!isSelectionMode && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit(e, garment);
+            }}
+            className="absolute top-3 right-3 p-2 rounded-lg bg-background/80 backdrop-blur hover:bg-background text-foreground hover:text-accent transition-colors duration-200 opacity-0 group-hover:opacity-100"
+          >
+            <Edit2 size={16} />
+          </button>
+        )}
       </div>
 
       {/* Divider */}

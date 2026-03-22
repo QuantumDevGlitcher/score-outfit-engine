@@ -339,21 +339,153 @@ export default function DetailsDrawer({
             </div>
           </div>
 
-          {/* Section 5: Notes */}
+          {/* Section 5: ML Analysis */}
+          <div className="space-y-6 bg-slate-800/20 p-5 rounded-2xl border border-slate-700/30">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                ML Insights
+              </h3>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 font-mono border border-emerald-500/20">
+                SCORE AI
+              </span>
+            </div>
+
+            <div className="space-y-6">
+              {/* Formality Score */}
+              <div>
+                <div className="flex justify-between mb-2">
+                  <label className="text-xs font-medium text-muted-foreground">Formality Balance</label>
+                  <span className="text-xs font-bold text-foreground">{(formData.formality_score || 0).toFixed(2)}</span>
+                </div>
+                <div className="h-1.5 w-full bg-slate-900 rounded-full relative border border-slate-700/50 shadow-inner">
+                  <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-500 rounded-full opacity-80" />
+                  <div 
+                    className="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 bg-white rounded-full shadow-[0_0_8px_rgba(0,0,0,0.5)] border-2 border-slate-900 z-10 transition-all duration-700 ease-out"
+                    style={{ left: `calc(${(formData.formality_score || 0) * 100}% - 7px)` }}
+                  />
+                </div>
+                <div className="flex justify-between mt-2 px-0.5">
+                  <span className="text-[9px] text-muted-foreground/70 uppercase font-medium">Casual / Relaxed</span>
+                  <span className="text-[9px] text-muted-foreground/70 uppercase font-medium">Formal / Sharp</span>
+                </div>
+              </div>
+
+              {/* Weather Warmth */}
+              <div>
+                <div className="flex justify-between mb-2">
+                  <label className="text-xs font-medium text-muted-foreground">Warmth Index</label>
+                  <span className="text-xs font-bold text-foreground">{(formData.weather_warmth || 0).toFixed(2)}</span>
+                </div>
+                <div className="h-1.5 w-full bg-slate-900 rounded-full relative border border-slate-700/50 shadow-inner">
+                  <div className="absolute inset-0 bg-gradient-to-r from-blue-500 via-orange-400 to-red-600 rounded-full opacity-80" />
+                  <div 
+                    className="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 bg-white rounded-full shadow-[0_0_8px_rgba(0,0,0,0.5)] border-2 border-slate-900 z-10 transition-all duration-700 ease-out"
+                    style={{ left: `calc(${(formData.weather_warmth || 0) * 100}% - 7px)` }}
+                  />
+                </div>
+                <div className="flex justify-between mt-2 px-0.5">
+                  <span className="text-[9px] text-muted-foreground/70 uppercase font-medium">Hot Weather / Light</span>
+                  <span className="text-[9px] text-muted-foreground/70 uppercase font-medium">Cold Weather / Heavy</span>
+                </div>
+              </div>
+
+              {/* Dominant Colors Analysis */}
+              {formData.dominant_colors && formData.dominant_colors.length > 0 && (
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground block mb-3">
+                    Color Spectrum Analysis
+                  </label>
+                  <div className="space-y-3">
+                    {formData.dominant_colors.map((color, idx) => (
+                      <div key={idx} className="flex items-center gap-3">
+                        <div 
+                          className="w-10 h-4 rounded-md border border-slate-700/50 shadow-sm" 
+                          style={{ backgroundColor: color.hex }}
+                          title={color.hex}
+                        />
+                        <div className="flex-1 h-1 bg-slate-800 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-slate-400 rounded-full opacity-60"
+                            style={{ width: `${color.percentage * 100}%` }}
+                          />
+                        </div>
+                        <span className="text-[10px] font-mono text-muted-foreground w-8 text-right">
+                          {Math.round(color.percentage * 100)}%
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Section 6: Additional Info */}
           <div className="space-y-4">
             <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               Additional Info
             </h3>
+            
+            {/* Tags */}
             <div>
               <label className="text-xs font-medium text-muted-foreground block mb-2">
-                Notes (optional)
+                Tags
+              </label>
+              <div className="flex flex-wrap gap-2 mb-3">
+                {formData.tags?.map((tag) => (
+                  <span
+                    key={tag}
+                    className="px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 text-[10px] font-medium border border-slate-700/50 flex items-center gap-1.5 group"
+                  >
+                    {tag}
+                    <button 
+                      onClick={() => setFormData({
+                        ...formData,
+                        tags: formData.tags?.filter(t => t !== tag)
+                      })}
+                      className="text-muted-foreground hover:text-red-400 transition-colors"
+                    >
+                      <X size={10} />
+                    </button>
+                  </span>
+                ))}
+                {(!formData.tags || formData.tags.length === 0) && (
+                  <span className="text-[10px] text-muted-foreground italic">No tags added</span>
+                )}
+              </div>
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Add tag and press Enter..."
+                  className="w-full px-3 py-2 rounded-lg bg-background border border-slate-700/50 text-xs text-foreground placeholder-muted-foreground focus:outline-none focus:border-emerald-500/50 transition-colors"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      const value = (e.target as HTMLInputElement).value.trim();
+                      if (value && !formData.tags?.includes(value)) {
+                        setFormData({
+                          ...formData,
+                          tags: [...(formData.tags || []), value]
+                        });
+                        (e.target as HTMLInputElement).value = '';
+                      }
+                    }
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Notes */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground block mb-2">
+                Notes
               </label>
               <textarea
                 value={formData.notes || ""}
                 onChange={(e) =>
                   setFormData({ ...formData, notes: e.target.value || undefined })
                 }
-                className="w-full px-3 py-2.5 rounded-lg bg-background border border-border text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/20 transition-colors resize-none"
+                className="w-full px-3 py-2.5 rounded-lg bg-background border border-slate-700/50 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20 transition-colors resize-none"
                 placeholder="Add any notes or care instructions..."
                 rows={3}
               />

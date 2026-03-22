@@ -6,8 +6,9 @@ import DetailsDrawer from "@/components/DetailsDrawer";
 import AddItemModal from "@/components/AddItemModal";
 import ViewModeSelector from "@/components/ViewModeSelector";
 import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
-import { useState, useMemo, useEffect } from "react";
+import { Plus, Trash2, CheckSquare, Square, X } from "lucide-react";
+import { useState, useMemo, useEffect, useCallback } from "react";
+import { cn } from "@/lib/utils";
 
 interface WardrobePage {
   theme: "dark" | "light";
@@ -101,65 +102,157 @@ const MOCK_GARMENTS: Garment[] = [
 type ViewMode = "deck" | "grid";
 
 export default function Wardrobe({ theme, onThemeChange }: WardrobePage) {
-  const [garments, setGarments] = useState<Garment[]>(MOCK_GARMENTS);
+  const [garments, setGarments] = useState<Garment[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/wardrobe")
+      .then((res) => res.json())
+      .then((data) => {
+        const mapped = data.map((item: any) => ({
+          id: item._id,
+          name: item.core_info.name,
+          image: item.image_url,
+          category: item.core_info.category,
+          primaryColor: item.core_info.primary_color,
+          secondaryColor: item.core_info.secondary_color,
+          material: item.attributes.material,
+          seasons: item.attributes.seasons,
+          formality: item.core_info.formality,
+          notes: item.attributes.notes,
+          tags: item.attributes.tags,
+          formality_score: item.ml_features?.formality_score,
+          weather_warmth: item.ml_features?.weather_warmth,
+          dominant_colors: item.ml_features?.dominant_colors,
+        }));
+        setGarments(mapped);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error("Failed to fetch wardrobe:", err);
+        setLoading(false);
+      });
+  }, []);
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     const saved = localStorage.getItem("wardrobeViewMode");
     return (saved as ViewMode) || "deck";
   });
   const [selectedGarment, setSelectedGarment] = useState<Garment | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  // Persist view mode to localStorage
-  useEffect(() => {
-    localStorage.setItem("wardrobeViewMode", viewMode);
-  }, [viewMode]);
-
-  // Filters
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [selectedColor, setSelectedColor] = useState("All");
   const [selectedSeason, setSelectedSeason] = useState("All");
   const [searchTerm, setSearchTerm] = useState("");
 
-  // Filter garments
   const filteredGarments = useMemo(() => {
     return garments.filter((garment) => {
-      const matchesCategory =
+      const matchCategory =
         selectedCategory === "All" || garment.category === selectedCategory;
-      const matchesSearch =
+      const matchColor =
+        selectedColor === "All" ||
+        garment.primaryColor === selectedColor ||
+        garment.secondaryColor === selectedColor;
+      const matchSeason =
+        selectedSeason === "All" || garment.seasons?.includes(selectedSeason);
+      const matchSearch =
+        searchTerm === "" ||
         garment.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        garment.material.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        garment.material?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         garment.tags?.some((tag) =>
           tag.toLowerCase().includes(searchTerm.toLowerCase())
         );
-      const matchesSeason =
-        selectedSeason === "All" || garment.seasons.includes(selectedSeason);
-      // Color filtering is simplified (would need better color matching in real app)
-      const matchesColor =
-        selectedColor === "All" ||
-        garment.primaryColor.toLowerCase().includes(selectedColor.toLowerCase());
 
-      return matchesCategory && matchesSearch && matchesSeason && matchesColor;
+      return matchCategory && matchColor && matchSeason && matchSearch;
     });
-  }, [garments, selectedCategory, searchTerm, selectedSeason, selectedColor]);
+  }, [garments, selectedCategory, selectedColor, selectedSeason, searchTerm]);
 
-  const handleSaveGarment = (updatedGarment: Garment) => {
-    setGarments(
-      garments.map((g) => (g.id === updatedGarment.id ? updatedGarment : g))
-    );
+  // Selection handlers
+  const toggleSelectGarment = useCallback((garmentId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(garmentId)) {
+        next.delete(garmentId);
+      } else {
+        next.add(garmentId);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleSelectAll = () => {
+    if (selectedIds.size === filteredGarments.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredGarments.map((g) => g.id)));
+    }
   };
 
-  const handleDeleteGarment = (garmentId: string) => {
-    setGarments(garments.filter((g) => g.id !== garmentId));
-    setSelectedGarment(null);
+  const exitSelectionMode = () => {
+    setIsSelectionMode(false);
+    setSelectedIds(new Set());
   };
 
-  const handleAddFromPhoto = (newGarment: Garment) => {
-    setGarments([...garments, newGarment]);
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`Are you sure you want to delete ${selectedIds.size} items?`)) return;
+
+    try {
+      const idsToDelete = Array.from(selectedIds);
+      const res = await fetch("/api/wardrobe", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: idsToDelete }),
+      });
+
+      if (res.ok) {
+        setGarments((prev) => prev.filter((g) => !selectedIds.has(g.id)));
+        exitSelectionMode();
+      } else {
+        const err = await res.json();
+        alert(err.message || "Failed to delete items");
+      }
+    } catch (error) {
+      console.error("Bulk delete error:", error);
+      alert("Failed to delete items");
+    }
+  };
+
+  const handleDeleteGarment = async (garmentId: string) => {
+    try {
+      const res = await fetch("/api/wardrobe", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: [garmentId] }),
+      });
+
+      if (res.ok) {
+        setGarments(garments.filter((g) => g.id !== garmentId));
+        setSelectedGarment(null);
+      } else {
+        const err = await res.json();
+        alert(err.message || "Failed to delete garment");
+      }
+    } catch (error) {
+      console.error("Delete error:", error);
+      alert("Failed to delete garment");
+    }
+  };
+
+  const handleAddFromPhoto = (newGarments: Garment[]) => {
+    setGarments([...newGarments, ...garments]);
   };
 
   const handleAddManual = (emptyGarment: Garment) => {
     setSelectedGarment(emptyGarment);
     setGarments([...garments, emptyGarment]);
+  };
+
+  const handleSaveGarment = (updated: Garment) => {
+    setGarments(garments.map((g) => (g.id === updated.id ? updated : g)));
+    setSelectedGarment(null);
   };
 
   const handleEditClick = (
@@ -180,16 +273,64 @@ export default function Wardrobe({ theme, onThemeChange }: WardrobePage) {
         <div className="max-w-7xl mx-auto space-y-6">
           {/* Toolbar */}
           <div className="flex items-center justify-between gap-4">
-            <Button
-              onClick={() => setShowAddModal(true)}
-              className="bg-emerald-500 hover:bg-emerald-600 text-white font-semibold gap-2 rounded-lg transition-colors duration-200"
-            >
-              <Plus size={18} />
-              Add Item
-            </Button>
+            <div className="flex items-center gap-3">
+              <Button
+                onClick={() => setShowAddModal(true)}
+                className="bg-emerald-500 hover:bg-emerald-600 text-white font-semibold gap-2 rounded-lg transition-colors duration-200"
+              >
+                <Plus size={18} />
+                Add Item
+              </Button>
+              
+              <Button
+                variant="outline"
+                onClick={() => setIsSelectionMode(!isSelectionMode)}
+                className={cn(
+                  "gap-2 rounded-lg border-slate-700/50 hover:bg-slate-800 transition-colors",
+                  isSelectionMode && "bg-accent/10 border-accent/50 text-accent"
+                )}
+              >
+                {isSelectionMode ? <X size={18} /> : <CheckSquare size={18} />}
+                {isSelectionMode ? "Cancel Selection" : "Select Items"}
+              </Button>
+            </div>
 
             <ViewModeSelector viewMode={viewMode} onViewModeChange={setViewMode} />
           </div>
+
+          {/* Selection Bar */}
+          {isSelectionMode && (
+            <div className="flex items-center justify-between bg-accent/5 border border-accent/20 rounded-xl p-4 animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={handleSelectAll}
+                  className="flex items-center gap-2 text-sm font-medium text-foreground hover:text-accent transition-colors"
+                >
+                  {selectedIds.size === filteredGarments.length ? (
+                    <CheckSquare size={18} className="text-accent" />
+                  ) : (
+                    <Square size={18} />
+                  )}
+                  Select All
+                </button>
+                <span className="text-sm text-muted-foreground">
+                  {selectedIds.size} items selected
+                </span>
+              </div>
+              <div className="flex items-center gap-3">
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  disabled={selectedIds.size === 0}
+                  onClick={handleBulkDelete}
+                  className="gap-2"
+                >
+                  <Trash2 size={16} />
+                  Delete Selected
+                </Button>
+              </div>
+            </div>
+          )}
 
           {/* Filter Bar */}
           <FilterBar
@@ -199,8 +340,12 @@ export default function Wardrobe({ theme, onThemeChange }: WardrobePage) {
               onSearchChange={setSearchTerm}
             />
 
-            {/* Empty State */}
-            {garments.length === 0 ? (
+            {/* Content Area */}
+            {loading ? (
+              <div className="flex items-center justify-center py-20">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
+              </div>
+            ) : garments.length === 0 ? (
               <div className="text-center py-16">
                 <h2 className="text-2xl font-bold text-foreground mb-2">
                   Your wardrobe is empty
@@ -229,8 +374,11 @@ export default function Wardrobe({ theme, onThemeChange }: WardrobePage) {
                   <GarmentCard
                     key={garment.id}
                     garment={garment}
-                    onClick={setSelectedGarment}
+                    onClick={isSelectionMode ? () => toggleSelectGarment(garment.id) : setSelectedGarment}
                     onEdit={(e) => handleEditClick(e, garment)}
+                    isSelectionMode={isSelectionMode}
+                    isSelected={selectedIds.has(garment.id)}
+                    onToggleSelect={() => toggleSelectGarment(garment.id)}
                   />
                 ))}
               </div>
@@ -241,9 +389,12 @@ export default function Wardrobe({ theme, onThemeChange }: WardrobePage) {
                   <CompactGarmentCard
                     key={garment.id}
                     garment={garment}
-                    onClick={setSelectedGarment}
+                    onClick={isSelectionMode ? () => toggleSelectGarment(garment.id) : setSelectedGarment}
                     onEdit={(e) => handleEditClick(e, garment)}
                     onDelete={handleDeleteGarment}
+                    isSelectionMode={isSelectionMode}
+                    isSelected={selectedIds.has(garment.id)}
+                    onToggleSelect={() => toggleSelectGarment(garment.id)}
                   />
                 ))}
               </div>

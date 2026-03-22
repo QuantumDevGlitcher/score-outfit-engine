@@ -1,0 +1,65 @@
+@startuml
+title UC-03 - Full Outfit Recommendation (Sequence)
+
+actor User
+participant "UI (GUI/CLI)" as UI
+participant "RecommendOutfitUseCase" as UC
+participant "WardrobeRepository (Port)" as WardrobePort
+participant "WardrobeRepository (Adapter)" as WardrobeAdapter
+participant "ContextProvider (Port)" as ContextPort
+participant "ContextProvider (Adapter: Weather/IP)" as ContextAdapter
+participant "ScoringService" as Scoring
+participant "FuzzyRuleEngine" as Fuzzy
+participant "NNCompatibilityModel (optional)" as NN
+participant "ExplainabilityService" as Explain
+participant "FeedbackRepository (Port)" as FeedbackPort
+participant "FeedbackRepository (Adapter)" as FeedbackAdapter
+
+User -> UI : Select context + style intent\n(optional weather = auto/manual)
+UI -> UC : recommend(context, style, weather?)
+UC -> ContextPort : get_context_labels()
+ContextPort -> ContextAdapter : resolve_weather_label(IP/GPS?) (optional)
+ContextAdapter --> ContextPort : weather_label, temp_bucket
+ContextPort --> UC : context_labels
+
+UC -> WardrobePort : load_items()
+WardrobePort -> WardrobeAdapter : load()
+WardrobeAdapter --> WardrobePort : wardrobe_items
+WardrobePort --> UC : wardrobe_items
+
+UC -> UC : build_candidate_pool(per_category)\n(pre-filter by context/style)
+
+UC -> UC : generate_outfit_candidates()\n(top/bottom/shoes[/outerwear])
+
+loop For each outfit candidate
+  UC -> Scoring : score(outfit, context_labels)
+  Scoring -> Fuzzy : fuzzy_score(outfit, context_labels)
+  Fuzzy --> Scoring : fuzzy_score
+  opt NN enabled
+    Scoring -> NN : predict_compatibility(outfit_features)
+    NN --> Scoring : nn_score
+  end
+  Scoring --> UC : final_score (0-100) + reasons
+end
+
+UC -> Explain : build_explanations(topN)
+Explain --> UC : ranked_outfits + explanations
+
+UC --> UI : return ranked_outfits
+UI --> User : Display top-N + explanations
+
+alt User selects an outfit
+  User -> UI : select(outfit_id)
+  UI -> UC : save_selection(outfit_id)
+  opt Feedback
+    User -> UI : like/dislike + optional reason tags
+    UI -> UC : store_feedback(outfit_id, signal, tags)
+    UC -> FeedbackPort : save(feedback)
+    FeedbackPort -> FeedbackAdapter : persist_local()
+    FeedbackAdapter --> FeedbackPort : ok
+  end
+else User tweaks context or exits
+  User -> UI : change context / exit
+end
+
+@enduml

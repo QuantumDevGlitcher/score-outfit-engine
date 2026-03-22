@@ -1,4 +1,4 @@
-import { Edit2, Eye, Trash2 } from "lucide-react";
+import { Edit2, Eye, Trash2, CheckSquare, Square } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import ImagePlaceholder from "@/components/ImagePlaceholder";
@@ -9,6 +9,9 @@ interface CompactGarmentCardProps {
   onClick: (garment: Garment) => void;
   onEdit: (e: React.MouseEvent, garment: Garment) => void;
   onDelete: (garmentId: string) => void;
+  isSelectionMode?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: () => void;
 }
 
 const formalityColors: Record<string, string> = {
@@ -22,12 +25,41 @@ export default function CompactGarmentCard({
   onClick,
   onEdit,
   onDelete,
+  isSelectionMode,
+  isSelected,
+  onToggleSelect,
 }: CompactGarmentCardProps) {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
 
   return (
-    <div className="bg-card border border-slate-700/50 rounded-lg overflow-hidden hover:border-emerald-500/50 transition-colors duration-200 flex items-center h-[100px] group">
+    <div 
+      onClick={() => onClick(garment)}
+      className={cn(
+        "bg-card border border-slate-700/50 rounded-lg overflow-hidden hover:border-emerald-500/50 transition-colors duration-200 flex items-center h-[100px] group cursor-pointer",
+        isSelected && "border-accent bg-accent/5"
+      )}
+    >
+      {/* Selection Indicator */}
+      {isSelectionMode && (
+        <div 
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleSelect?.();
+          }}
+          className="pl-4 pr-1"
+        >
+          <div className={cn(
+            "w-6 h-6 rounded-lg flex items-center justify-center transition-all duration-200",
+            isSelected 
+              ? "bg-accent text-white shadow-lg shadow-accent/30" 
+              : "bg-background border border-slate-700/50 text-muted-foreground"
+          )}>
+            {isSelected ? <CheckSquare size={16} /> : <Square size={16} />}
+          </div>
+        </div>
+      )}
+
       {/* Thumbnail */}
       <div className="relative w-20 h-20 flex-shrink-0 bg-background overflow-hidden m-2 rounded-md border border-slate-700/50">
         {imageError ? (
@@ -108,32 +140,42 @@ export default function CompactGarmentCard({
 
       {/* Actions */}
       <div className="flex items-center gap-1 px-3 flex-shrink-0">
-        <button
-          onClick={() => onClick(garment)}
-          className="p-1.5 rounded-lg hover:bg-slate-800/50 text-muted-foreground hover:text-emerald-400 transition-colors duration-200"
-          title="View details"
-        >
-          <Eye size={16} />
-        </button>
-        <button
-          onClick={onEdit}
-          className="p-1.5 rounded-lg hover:bg-slate-800/50 text-muted-foreground hover:text-emerald-400 transition-colors duration-200"
-          title="Edit"
-        >
-          <Edit2 size={16} />
-        </button>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            if (confirm(`Delete ${garment.name}?`)) {
-              onDelete(garment.id);
-            }
-          }}
-          className="p-1.5 rounded-lg hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-colors duration-200"
-          title="Delete"
-        >
-          <Trash2 size={16} />
-        </button>
+        {!isSelectionMode && (
+          <>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onClick(garment);
+              }}
+              className="p-1.5 rounded-lg hover:bg-slate-800/50 text-muted-foreground hover:text-emerald-400 transition-colors duration-200"
+              title="View details"
+            >
+              <Eye size={16} />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit(e, garment);
+              }}
+              className="p-1.5 rounded-lg hover:bg-slate-800/50 text-muted-foreground hover:text-emerald-400 transition-colors duration-200"
+              title="Edit"
+            >
+              <Edit2 size={16} />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (confirm(`Delete ${garment.name}?`)) {
+                  onDelete(garment.id);
+                }
+              }}
+              className="p-1.5 rounded-lg hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-colors duration-200"
+              title="Delete"
+            >
+              <Trash2 size={16} />
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

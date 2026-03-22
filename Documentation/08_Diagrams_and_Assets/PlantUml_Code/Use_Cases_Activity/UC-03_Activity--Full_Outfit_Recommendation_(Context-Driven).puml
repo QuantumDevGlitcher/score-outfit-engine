@@ -1,0 +1,35 @@
+@startuml
+title UC-03 - Full Outfit Recommendation (Activity)
+
+start
+
+partition "User/UI" {
+  :Select context (occasion + style intent);
+  :Optional weather input\n(manual or adapter);
+}
+
+partition "Core (Use Case)" {
+  :Load wardrobe inventory;
+  :Build candidate pool (per category);
+  :Generate outfit combinations;
+  :Score outfits (fuzzy + context\n+ optional NN);
+  :Rank top-N outfits;
+  :Return recommendations + explanations;
+}
+
+partition "User/UI" {
+  :Display top-N outfits;
+  if (User selects outfit?) then (yes)
+    :Store selection;
+    :Ask for feedback;
+    if (Feedback given?) then (yes)
+      :Store feedback locally;
+      :Update personalization weights (optional);
+    endif
+  else (no)
+    :User tweaks context or exits;
+  endif
+}
+
+stop
+@enduml

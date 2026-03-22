@@ -20,7 +20,7 @@ const menuItems = [
 
 const secondaryItems = [
   { icon: Sliders, label: "Preferences", path: "/preferences" },
-  { icon: LogOut, label: "Logout", path: "/logout" },
+  { icon: LogOut, label: "Logout", path: "/" },
 ];
 
 interface NavigationMenuProps {

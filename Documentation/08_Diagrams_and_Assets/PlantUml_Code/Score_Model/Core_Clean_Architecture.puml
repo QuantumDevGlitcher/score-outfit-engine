@@ -1,0 +1,97 @@
+@startuml
+title SCORE Core - Clean Architecture (Core Module)
+
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+left to right direction
+
+package "UI Layer\n(outside score_core)" as UI {
+  [CLI (Typer)] as CLI
+  [GUI (Streamlit)] as GUI
+  [Android App] as AND
+}
+
+package "score_core" as CORE {
+
+  package "domain\n(pure)" as DOMAIN {
+    [Entities\n(Garment, Outfit, UserProfile)] as ENT
+    [Value Objects\n(Context, Color, Score, Explanation)] as VO
+  }
+
+  package "application\n(use cases + services)" as APP {
+    [Use Cases\nUC01..UC04] as UC
+    [Services\nfilter/generator/explain/feedback] as SVC
+  }
+
+  package "ports\n(interfaces)" as PORTS {
+    interface "WardrobeRepositoryPort" as P_WARD
+    interface "PreferencesPort" as P_PREF
+    interface "PerceptionPort" as P_PERC
+    interface "ContextProviderPort" as P_CTX
+    interface "ScoringEnginePort" as P_SCORE
+    interface "RecommenderPort" as P_REC
+  }
+
+  package "scoring\n(brain)" as SCORING {
+    [Rules (L1)] as L1
+    [Fuzzy (L2)] as L2
+    [Neural (L3 optional)] as L3
+    [ScoringEngine] as ENGINE
+  }
+
+  package "adapters\n(mapping)" as ADAPT {
+    [DTO Mapper] as A_DTO
+    [Context Normalizer] as A_CTX
+    [Feedback Mapper] as A_FB
+  }
+
+  package "infrastructure\n(implementations)" as INFRA {
+    [JsonWardrobeRepository] as I_JSON
+    [SqliteWardrobeRepository] as I_SQL
+    [SqlitePreferencesRepository] as I_PREF
+    [CNN Runtime\n(classifier/segmenter)] as I_CNN
+    [Weather API Adapter] as I_WAPI
+    [Logger] as I_LOG
+    [NN Runtime] as I_NNR
+  }
+}
+
+' --- Dependency flow (inward) ---
+ENT <-- UC
+VO  <-- UC
+ENT <-- SVC
+VO  <-- SVC
+
+UC --> P_WARD
+UC --> P_PREF
+UC --> P_PERC
+UC --> P_CTX
+UC --> P_SCORE
+UC --> P_REC
+
+SVC --> P_SCORE
+SVC --> P_WARD
+SVC --> P_PREF
+
+ENGINE --> L1
+ENGINE --> L2
+ENGINE --> L3
+ENGINE --> ENT
+ENGINE --> VO
+
+' --- Infrastructure implements ports ---
+I_JSON ..|> P_WARD
+I_SQL  ..|> P_WARD
+I_PREF ..|> P_PREF
+I_CNN  ..|> P_PERC
+I_WAPI ..|> P_CTX
+ENGINE ..|> P_SCORE
+
+I_NNR --> L3
+
+' --- UI calls application layer (outside core) ---
+CLI --> UC
+GUI --> UC
+AND --> UC
+
+@enduml
