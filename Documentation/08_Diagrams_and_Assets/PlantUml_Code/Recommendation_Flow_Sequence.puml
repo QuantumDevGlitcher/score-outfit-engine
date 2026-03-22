@@ -1,0 +1,31 @@
+@startuml
+title SCORE - Recommendation Flow (Sequence)
+
+actor User
+participant "UI/CLI" as UI
+participant "Core Engine" as CORE
+participant "Wardrobe Store" as STORE
+participant "Weather Adapter\n(optional)" as WEATHER
+participant "Vision Perception\n(optional)" as VISION
+
+User -> UI : request recommendation\n(context + constraints)
+UI -> CORE : recommend(context, constraints)
+
+opt weather enabled
+  CORE -> WEATHER : get_weather_label()
+  WEATHER --> CORE : {temp_label, condition}
+end
+
+CORE -> STORE : load_wardrobe_items()
+STORE --> CORE : items + embeddings + metadata
+
+opt photo provided
+  CORE -> VISION : analyze(image)
+  VISION --> CORE : detected garments + attributes + colors
+end
+
+CORE -> CORE : filter candidates\n+ generate outfits\n+ score & rank
+CORE --> UI : top-K outfits\n+ explanations
+UI --> User : display results
+
+@enduml

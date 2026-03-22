@@ -1,0 +1,22 @@
+@startuml
+title UC-01 — Outfit Completion (Activity)
+start
+:User selects a base outfit\n(or selects known items);
+:User marks one category as missing\n(e.g., missing "Top");
+:User optionally sets context\n(occasion, temperature label);
+:System loads wardrobe items\nfor that category;
+:System filters by constraints\n(size, formality, weather label);
+:System scores candidates\n(compatibility + context);
+:System shows ranked candidates\nwith explanations;
+if (User selects one?) then (yes)
+  :System saves selection\nas recommended outfit;
+  :System asks for feedback;
+  if (Feedback given?) then (yes)
+    :Store feedback locally;
+    :Update personalization weights\n(optional);
+  endif
+else (no)
+  :User changes context/constraints\nor exits;
+endif
+stop
+@enduml

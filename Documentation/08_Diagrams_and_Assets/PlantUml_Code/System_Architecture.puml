@@ -1,0 +1,71 @@
+@startuml
+title SCORE — System Architecture (Clean Architecture + Ports/Adapters)
+
+skinparam componentStyle rectangle
+skinparam shadowing false
+
+package "UI Layer" {
+  [CLI (Typer)] as CLI
+  [GUI (Streamlit)] as GUI
+}
+
+package "Application Layer (Use Cases)" {
+  [Recommend Outfit Use Case] as UC_Recommend
+  [Update Preferences Use Case] as UC_Prefs
+}
+
+package "Domain Layer (Entities + Rules)" {
+  [Garment Entity] as E_Garment
+  [Outfit Entity] as E_Outfit
+  [Scoring Engine] as D_Score
+  [Fuzzy Rules] as D_Fuzzy
+  [Explainability Builder] as D_Explain
+}
+
+package "Ports (Interfaces)" {
+  interface "WardrobeRepository" as P_Wardrobe
+  interface "PreferencesRepository" as P_Prefs
+  interface "PerceptionService" as P_Perception
+}
+
+package "Infrastructure / Adapters" {
+  [JSON Wardrobe Adapter] as A_WardrobeJSON
+  [SQLite Wardrobe Adapter (optional)] as A_WardrobeDB
+  [Preferences Storage (JSON/SQLite)] as A_Prefs
+  [Vision Adapter (PyTorch)] as A_Vision
+  [Color Extraction (OpenCV)] as A_Color
+}
+
+CLI --> UC_Recommend
+GUI --> UC_Recommend
+GUI --> UC_Prefs
+
+UC_Recommend --> D_Score
+UC_Recommend --> P_Wardrobe
+UC_Recommend --> P_Perception
+UC_Recommend --> D_Explain
+
+UC_Prefs --> P_Prefs
+
+D_Score --> D_Fuzzy
+D_Score --> E_Garment
+D_Score --> E_Outfit
+
+P_Wardrobe <.. A_WardrobeJSON
+P_Wardrobe <.. A_WardrobeDB
+P_Prefs <.. A_Prefs
+P_Perception <.. A_Vision
+
+A_Vision --> A_Color
+
+note right of P_Perception
+Perception is optional in v1:
+Manual input mode can bypass it.
+end note
+
+note bottom of D_Score
+Core decision logic is explainable:
+Fuzzy rules + context weights + penalties.
+end note
+
+@enduml

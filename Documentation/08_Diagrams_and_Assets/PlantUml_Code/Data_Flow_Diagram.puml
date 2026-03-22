@@ -1,0 +1,70 @@
+@startuml
+title SCORE — Data Flow Diagram
+
+skinparam shadowing false
+
+actor User
+
+rectangle "Input" {
+  (Select Context) as Ctx
+  (Provide Garments\nManual or Image) as Inp
+}
+
+rectangle "Perception (Optional)" {
+  (Garment Classifier\nPyTorch) as Cls
+  (Dominant Color\nOpenCV) as Col
+  (User Confirmation\nif uncertainty) as Confirm
+}
+
+rectangle "Core Processing" {
+  (Normalize to Garment Objects) as Norm
+  (Candidate Generation\nWardrobe / Completion) as Cand
+  (Scoring Engine) as Score
+  (Fuzzy Inference) as Fuzzy
+  (Context Modifiers\n+ Penalties) as CMod
+  (Explainability Builder) as Explain
+}
+
+rectangle "Output" {
+  (Ranked Recommendations\nScore + Explanation) as Out
+}
+
+rectangle "Feedback (Optional)" {
+  (Approve / Reject) as Fb
+  (Update Preference Weights) as Update
+  (Persist Preferences) as Persist
+}
+
+User --> Ctx
+User --> Inp
+
+Inp --> Cls
+Inp --> Col
+Cls --> Confirm
+Col --> Confirm
+Confirm --> Norm
+
+Ctx --> Norm
+Norm --> Cand
+Cand --> Score
+Score --> Fuzzy
+Fuzzy --> CMod
+CMod --> Explain
+Explain --> Out
+
+User <-- Out
+User --> Fb
+Fb --> Update
+Update --> Persist
+
+note right of Inp
+If no image is provided,
+manual garment input is used.
+end note
+
+note right of Score
+Scoring = weighted sum of
+ColorHarmony + Material + Context + Preferences - Penalties
+end note
+
+@enduml

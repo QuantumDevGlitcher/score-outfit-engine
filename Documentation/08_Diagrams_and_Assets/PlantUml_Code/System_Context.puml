@@ -1,0 +1,89 @@
+@startuml
+title SCORE — System Context
+
+left to right direction
+skinparam shadowing false
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+skinparam defaultFontName Arial
+
+' --- ACTORS ---
+actor "User" as User
+
+' --- EXTERNAL SYSTEMS / SERVICES ---
+cloud "Internet" as Internet {
+  component "Weather API\n(Optional)" as WeatherAPI
+  component "IP Geolocation\n(Optional)" as GeoIP
+}
+
+' --- SCORE SYSTEM BOUNDARY ---
+rectangle "SCORE System" as SCORE {
+
+  ' UI Layer
+  package "UI Layer" {
+    component "React SPA (Vite)" as REACT
+    component "Mobile App (Android)\n(Future)" as ANDROID
+  }
+
+  ' API Layer
+  package "API Layer" {
+    component "Express API" as ExpressAPI
+    component "FastAPI ML Service" as FastAPI
+  }
+
+  ' Perception (Optional)
+  package "Perception Layer\n(Optional)" {
+    component "Vision Inference\n(Model Weights)" as Vision
+    component "Color Extraction\n(K-Means)" as Color
+  }
+
+  ' Persistence
+  package "Database" {
+    database "MongoDB" as MongoDB
+  }
+
+  ' Adapters / Ports
+  package "Adapters (Ports)" {
+    component "Weather Adapter" as WeatherAdapter
+    component "Geo Adapter" as GeoAdapter
+    component "Mongo Adapter" as MongoAdapter
+    component "ML Client Adapter" as MLClient
+  }
+}
+
+' --- USER INTERACTIONS ---
+User --> REACT : forms + uploads
+User --> ANDROID : camera + inputs\n(future)
+
+' --- UI to Core ---
+REACT --> ExpressAPI : HTTP requests
+ANDROID --> ExpressAPI : HTTP requests\n(future)
+
+' --- Core to internal components ---
+ExpressAPI --> FastAPI : inference/scoring requests
+ExpressAPI --> MongoAdapter : update preferences/feedback
+
+' --- Core to storage via adapters ---
+ExpressAPI --> MongoAdapter : load wardrobe/save feedback
+MongoAdapter --> MongoDB
+
+' --- Core to perception via adapters (optional) ---
+ExpressAPI --> MLClient : analyze outfit photo (optional)
+MLClient --> FastAPI
+
+' --- External data via adapters (optional) ---
+ExpressAPI --> WeatherAdapter : get weather label\n(optional)
+ExpressAPI --> GeoAdapter : get coarse location\n(optional)
+
+WeatherAdapter --> WeatherAPI
+GeoAdapter --> GeoIP
+WeatherAPI --> Internet
+GeoIP --> Internet
+
+
+note bottom of WeatherAdapter
+Weather is an adapter: enriches context,
+never required for core scoring.
+end note
+
+@enduml

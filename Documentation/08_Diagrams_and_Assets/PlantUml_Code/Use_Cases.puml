@@ -1,0 +1,30 @@
+@startuml
+title SCORE — Use Cases (Hardened)
+left to right direction
+skinparam shadowing false
+
+actor "User" as User
+
+rectangle "SCORE" {
+  usecase "UC-01 Outfit Completion\n(Fill Missing Item)" as UC1
+  usecase "UC-02 Garment Comparison\n(Rank Alternatives)" as UC2
+  usecase "UC-03 Full Outfit Recommendation\n(Context-Driven)" as UC3
+  usecase "UC-04 Photo-Based Analysis\n(Vision Mode)" as UC4
+  usecase "UC-05 Manage Wardrobe\n(Add/Edit/Remove Items)" as UC5
+  usecase "UC-06 Provide Feedback\n(Like/Dislike/Select)" as UC6
+}
+
+User --> UC1
+User --> UC2
+User --> UC3
+User --> UC4
+User --> UC5
+User --> UC6
+
+' Optional “feedback after” association without abusing extends/include
+UC1 ..> UC6 : optional
+UC2 ..> UC6 : optional
+UC3 ..> UC6 : optional
+UC4 ..> UC6 : optional
+
+@enduml

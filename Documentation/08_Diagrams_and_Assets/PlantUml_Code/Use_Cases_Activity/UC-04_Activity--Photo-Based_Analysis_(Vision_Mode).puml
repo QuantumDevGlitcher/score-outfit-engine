@@ -1,0 +1,22 @@
+@startuml
+title UC-04 — Photo-Based Outfit Analysis (Activity)
+start
+:User uploads outfit photo;
+:System runs vision inference\n(optional module);
+if (Vision available?) then (yes)
+  :Extract items + colors;
+  :Build "current outfit" representation;
+else (no)
+  :Fallback to manual input;
+endif
+:User selects context (optional);
+:System scores current outfit;
+:System suggests improvements\n(replace one item / add item);
+:Show explanations;
+:Ask for feedback;
+if (Feedback given?) then (yes)
+  :Store feedback locally;
+  :Update personalization weights\n(optional);
+endif
+stop
+@enduml
