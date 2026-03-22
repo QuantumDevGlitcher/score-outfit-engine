@@ -22,7 +22,7 @@ export async function handleAnalyzeOutfit(
     const form = new FormData();
     form.append(
       "image",
-      new Blob([file.buffer], { type: file.mimetype }),
+      new Blob([new Uint8Array(file.buffer)], { type: file.mimetype }),
       file.originalname || "upload.jpg",
     );
 
