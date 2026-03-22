@@ -8,15 +8,15 @@ export default function Landing() {
         {/* Logo */}
         <div className="mb-8">
           <img
-            src="https://cdn.builder.io/api/v1/image/assets%2Fdd2a45c9de4b40dd985ff3aaa868e646%2F7776ccd91dad4426a008ac742e5e4ce6?format=webp&width=800&height=1200"
-            alt="SCORE Logo"
+            src="/logo.png"
+            alt="WARDROBE GENIE Logo"
             className="w-48 h-48 mx-auto"
           />
         </div>
 
         {/* Title */}
         <h1 className="text-5xl md:text-6xl font-bold text-foreground mb-6 tracking-tight">
-          SCORE
+          WARDROBE GENIE
         </h1>
 
         {/* Subtitle */}

@@ -21,7 +21,7 @@ const menuItems = [
 
 const secondaryItems = [
   { icon: Settings, label: "Settings", path: "/settings" },
-  { icon: LogOut, label: "Logout", path: "/logout" },
+  { icon: LogOut, label: "Logout", path: "/" },
 ];
 
 interface SidebarProps {

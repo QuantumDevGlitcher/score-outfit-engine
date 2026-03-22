@@ -1,14 +1,15 @@
 import { useState } from "react";
-import { X, Upload, Plus } from "lucide-react";
+import { X, Upload, Plus, Check, AlertCircle, ThumbsUp, ThumbsDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ImagePlaceholder from "@/components/ImagePlaceholder";
 import { cn } from "@/lib/utils";
 import type { Garment } from "@/components/GarmentCard";
+import { useToast } from "@/hooks/use-toast";
 
 interface AddItemModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddFromPhoto: (garment: Garment) => void;
+  onAddFromPhoto: (garments: Garment[]) => void;
   onAddManual: (garment: Garment) => void;
 }
 
@@ -96,7 +97,7 @@ export default function AddItemModal({
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [formData, setFormData] = useState({
-    name: "Casual Blue Shirt",
+    name: "New Item",
     category: "Top",
     primaryColor: "#1e40af",
     secondaryColor: "#ffffff",
@@ -104,8 +105,19 @@ export default function AddItemModal({
     seasons: ["Spring", "Summer"],
     formality: "Casual",
   });
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [detectedItems, setDetectedItems] = useState<any[]>([]);
+  const [selectedIndices, setSelectedIndices] = useState<number[]>([]);
+  const [analysisResult, setAnalysisResult] = useState<{
+    outfit_embedding?: number[];
+    s_style?: number;
+    s_rel?: number;
+  } | null>(null);
+  const [feedbackGiven, setFeedbackGiven] = useState<"like" | "dislike" | null>(null);
+  const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
+  const { toast } = useToast();
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
@@ -113,6 +125,46 @@ export default function AddItemModal({
         setUploadedImage(event.target?.result as string);
       };
       reader.readAsDataURL(file);
+
+      // Trigger ML Analysis
+      setIsAnalyzing(true);
+      const formData = new FormData();
+      formData.append("image", file);
+
+      try {
+        const response = await fetch("/api/wardrobe/add", {
+          method: "POST",
+          body: formData,
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setDetectedItems(data.items);
+          setSelectedIndices(data.items.map((_: any, i: number) => i));
+          setAnalysisResult({
+            outfit_embedding: data.outfit_embedding,
+            s_style: data.s_style,
+            s_rel: data.s_rel,
+          });
+          setFeedbackGiven(null);
+          
+          if (data.items.length > 0) {
+            const first = data.items[0];
+            setFormData({
+              name: first.core_info.name,
+              category: first.core_info.category,
+              primaryColor: first.core_info.primary_color,
+              secondaryColor: first.core_info.secondary_color,
+              material: first.attributes.material,
+              seasons: first.attributes.seasons,
+              formality: first.core_info.formality,
+            });
+          }
+        }
+      } catch (err) {
+        console.error("Analysis failed:", err);
+      } finally {
+        setIsAnalyzing(false);
+      }
     }
   };
 
@@ -137,15 +189,79 @@ export default function AddItemModal({
     }
   };
 
-  const handleSaveFromPhoto = () => {
-    if (!uploadedImage) return;
-    const newGarment: Garment = {
-      id: Date.now().toString(),
-      image: uploadedImage,
-      ...formData,
-    };
-    onAddFromPhoto(newGarment);
-    resetModal();
+  const handleSaveFromPhoto = async () => {
+    if (detectedItems.length === 0) return;
+    
+    const selectedItems = detectedItems.filter((_, i) => selectedIndices.includes(i));
+    if (selectedItems.length === 0) return;
+
+    try {
+      const response = await fetch("/api/wardrobe/bulk-add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: selectedItems }),
+      });
+
+      if (response.ok) {
+        const { items: savedItems } = await response.json();
+        const newGarments: Garment[] = (savedItems || []).map((item: any) => ({
+          id: item._id,
+          name: item.core_info.name,
+          image: item.image_url,
+          category: item.core_info.category,
+          primaryColor: item.core_info.primary_color,
+          secondaryColor: item.core_info.secondary_color,
+          material: item.attributes.material,
+          seasons: item.attributes.seasons,
+          formality: item.core_info.formality,
+          formality_score: item.ml_features?.formality_score,
+          weather_warmth: item.ml_features?.weather_warmth,
+          dominant_colors: item.ml_features?.dominant_colors,
+          confidence: item.ml_features?.confidence,
+        }));
+        
+        onAddFromPhoto(newGarments);
+        resetModal();
+      }
+    } catch (err) {
+      console.error("Bulk save failed:", err);
+    }
+  };
+
+  const handleFeedback = async (liked: boolean) => {
+    if (!analysisResult?.outfit_embedding) return;
+    
+    setIsSubmittingFeedback(true);
+    try {
+      const response = await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: "wardrobe_upload_" + Date.now(),
+          outfit_embedding: analysisResult.outfit_embedding,
+          liked,
+          s_style: analysisResult.s_style || 0.5,
+          s_rel: analysisResult.s_rel || 0.5,
+        }),
+      });
+      
+      if (response.ok) {
+        setFeedbackGiven(liked ? "like" : "dislike");
+        toast({
+          title: liked ? "Preference Saved!" : "Dislike Noted",
+          description: "Your personal aesthetic has been updated based on this outfit.",
+        });
+      }
+    } catch (err) {
+      console.error("Feedback failed:", err);
+      toast({
+        title: "Feedback Failed",
+        description: "Failed to update your style preferences.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmittingFeedback(false);
+    }
   };
 
   const handleNext = () => {
@@ -441,61 +557,132 @@ export default function AddItemModal({
               </div>
             ) : (
               // Step 3: Confirm
-              <div className="px-6 py-8 space-y-6 animate-in fade-in duration-300">
-                <div className="rounded-[16px] border border-slate-700/50 bg-background/30 p-6 space-y-4">
-                  <h3 className="text-sm font-semibold text-foreground">
-                    Review Details
-                  </h3>
+              <div className="px-6 py-8 space-y-6 animate-in fade-in duration-300 max-h-[60vh] overflow-y-auto">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-foreground">
+                      Confirm Detected Garments
+                    </h3>
+                    <span className="text-xs text-muted-foreground bg-slate-800 px-2 py-1 rounded-full">
+                      {selectedIndices.length} of {detectedItems.length} selected
+                    </span>
+                  </div>
 
-                  {/* Image Preview */}
-                  {uploadedImage && (
-                    <div className="relative rounded-[12px] overflow-hidden bg-background aspect-square">
-                      <img
-                        src={uploadedImage}
-                        alt={formData.name}
-                        className="w-full h-full object-cover"
-                      />
+                  {detectedItems.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-10 bg-background/30 rounded-2xl border border-dashed border-slate-700/50">
+                      <AlertCircle className="w-10 h-10 text-slate-500 mb-3" />
+                      <p className="text-sm text-slate-400">No garments detected</p>
+                      <button 
+                        onClick={() => setStep("details")}
+                        className="mt-4 text-xs text-emerald-400 hover:underline"
+                      >
+                        Go back and try another image
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-4">
+                      {detectedItems.map((item, idx) => {
+                        const isSelected = selectedIndices.includes(idx);
+                        const confidencePercent = Math.round((item.ml_features?.confidence || 0) * 100);
+                        
+                        return (
+                          <div 
+                            key={idx}
+                            onClick={() => {
+                              setSelectedIndices(prev => 
+                                isSelected 
+                                  ? prev.filter(i => i !== idx) 
+                                  : [...prev, idx]
+                              );
+                            }}
+                            className={cn(
+                              "group relative rounded-2xl overflow-hidden border transition-all duration-200 cursor-pointer",
+                              isSelected 
+                                ? "border-emerald-500 bg-emerald-500/5 shadow-[0_0_15px_-5px_rgba(16,185,129,0.3)]" 
+                                : "border-slate-700/50 bg-background/30 hover:border-slate-600"
+                            )}
+                          >
+                            {/* Checkbox Overlay */}
+                            <div className={cn(
+                              "absolute top-2 right-2 z-10 w-5 h-5 rounded-full border flex items-center justify-center transition-colors duration-200",
+                              isSelected 
+                                ? "bg-emerald-500 border-emerald-500 text-white" 
+                                : "bg-black/20 border-white/30 text-transparent"
+                            )}>
+                              <Check className="w-3 h-3" strokeWidth={3} />
+                            </div>
+
+                            {/* Confidence Badge */}
+                            <div className="absolute top-2 left-2 z-10 bg-black/60 backdrop-blur-md px-1.5 py-0.5 rounded text-[10px] font-bold text-white border border-white/10">
+                              {confidencePercent}%
+                            </div>
+
+                            <div className="aspect-square overflow-hidden bg-slate-900">
+                              <img 
+                                src={item.image_url} 
+                                alt={item.core_info.name}
+                                className={cn(
+                                  "w-full h-full object-cover transition-transform duration-500",
+                                  isSelected ? "scale-105" : "group-hover:scale-105"
+                                )}
+                              />
+                            </div>
+
+                            <div className="p-3">
+                              <p className="text-[11px] font-bold text-foreground truncate uppercase tracking-tight">
+                                {item.core_info.category}
+                              </p>
+                              <p className="text-[10px] text-muted-foreground truncate">
+                                {item.core_info.name}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
-
-                  {/* Summary */}
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-xs text-muted-foreground">Name</span>
-                      <span className="text-sm font-medium text-foreground">
-                        {formData.name}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-xs text-muted-foreground">
-                        Category
-                      </span>
-                      <span className="text-sm font-medium text-foreground">
-                        {formData.category}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-xs text-muted-foreground">
-                        Material
-                      </span>
-                      <span className="text-sm font-medium text-foreground">
-                        {formData.material}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-xs text-muted-foreground">
-                        Formality
-                      </span>
-                      <span className="text-sm font-medium text-foreground">
-                        {formData.formality}
-                      </span>
-                    </div>
-                  </div>
                 </div>
 
                 <p className="text-xs text-muted-foreground text-center">
-                  You can edit more details after saving
+                  Select the items you want to add to your wardrobe. You can edit individual details later.
                 </p>
+
+                {analysisResult?.outfit_embedding && (
+                  <div className="mt-6 p-4 rounded-2xl bg-slate-900/50 border border-slate-700/50 flex flex-col items-center gap-4">
+                    <h4 className="text-sm font-semibold text-foreground">Like this outfit?</h4>
+                    <p className="text-xs text-muted-foreground text-center">
+                      Explicitly liking or disliking this outfit helps SCORE learn your personal aesthetic.
+                    </p>
+                    <div className="flex gap-4">
+                      <button
+                        disabled={isSubmittingFeedback || feedbackGiven !== null}
+                        onClick={() => handleFeedback(true)}
+                        className={cn(
+                          "flex items-center gap-2 px-6 py-2 rounded-full border transition-all duration-200",
+                          feedbackGiven === "like"
+                            ? "bg-emerald-500/20 border-emerald-500 text-emerald-400"
+                            : "bg-background border-slate-700/50 text-muted-foreground hover:border-emerald-500 hover:text-emerald-400"
+                        )}
+                      >
+                        <ThumbsUp className="w-4 h-4" />
+                        <span className="text-sm font-medium">Love it</span>
+                      </button>
+                      <button
+                        disabled={isSubmittingFeedback || feedbackGiven !== null}
+                        onClick={() => handleFeedback(false)}
+                        className={cn(
+                          "flex items-center gap-2 px-6 py-2 rounded-full border transition-all duration-200",
+                          feedbackGiven === "dislike"
+                            ? "bg-rose-500/20 border-rose-500 text-rose-400"
+                            : "bg-background border-slate-700/50 text-muted-foreground hover:border-rose-500 hover:text-rose-400"
+                        )}
+                      >
+                        <ThumbsDown className="w-4 h-4" />
+                        <span className="text-sm font-medium">Not me</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -532,9 +719,13 @@ export default function AddItemModal({
             {step === "confirm" && (
               <Button
                 onClick={handleSaveFromPhoto}
+                disabled={selectedIndices.length === 0}
                 className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold rounded-lg transition-colors duration-200"
               >
-                Save Garment
+                {selectedIndices.length === 0 
+                  ? "Select items to add" 
+                  : `Add ${selectedIndices.length} ${selectedIndices.length === 1 ? 'Garment' : 'Garments'}`
+                }
               </Button>
             )}
           </div>

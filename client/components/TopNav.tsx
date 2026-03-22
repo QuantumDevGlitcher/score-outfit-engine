@@ -20,7 +20,7 @@ export default function TopNav({ title, theme, onThemeChange }: TopNavProps) {
       <div className="border-b border-slate-700/50 bg-card/50 backdrop-blur-sm sticky top-0 z-40">
         <div className="px-4 md:px-6 py-3 flex items-center justify-between gap-4">
           {/* ZONE 1: Brand (Left) */}
-          <Link to="/" className="flex items-center gap-2 flex-shrink-0 hover:opacity-80 transition-opacity duration-200">
+          <Link to="/dashboard" className="flex items-center gap-2 flex-shrink-0 hover:opacity-80 transition-opacity duration-200">
             {/* Logo Icon */}
             <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
               <svg
@@ -43,7 +43,7 @@ export default function TopNav({ title, theme, onThemeChange }: TopNavProps) {
 
             {/* Brand Text */}
             <span className="font-bold text-base md:text-lg text-foreground">
-              SCORE
+              WardrobeGenie
             </span>
           </Link>
 

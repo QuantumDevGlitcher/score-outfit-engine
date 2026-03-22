@@ -25,7 +25,7 @@ import {
   COLOR_OPTIONS,
 } from "@/types/preferences";
 
-const ICON_MAP: Record<string, React.ComponentType<{ size: number }>> = {
+const ICON_MAP: Record<string, React.ComponentType<any>> = {
   Briefcase,
   Coffee,
   Smile,
